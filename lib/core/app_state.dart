@@ -1,6 +1,12 @@
 import 'package:flutter/foundation.dart';
 
 import '../data/initial_data.dart';
+import '../services/api_service.dart';
+import '../services/token_storage.dart';
+import '../repositories/auth_repository.dart';
+import '../repositories/room_repository.dart';
+import '../viewmodels/room_view_model.dart';
+import '../viewmodels/auth_view_model.dart';
 import '../models/app_notification.dart';
 import '../models/booking.dart';
 import '../models/room.dart';
@@ -9,7 +15,6 @@ import '../models/user_profile.dart';
 class AppState extends ChangeNotifier {
   AppState._()
       : user = createInitialUser(),
-        rooms = createInitialRooms(),
         notifications = createInitialNotifications();
 
   static final AppState instance = AppState._();
@@ -18,12 +23,35 @@ class AppState extends ChangeNotifier {
   // AUTH STATE
   // =========================
   bool isLoggedIn = false;
+  bool authBusy = false;
+  bool restoring = true;
+  final api = ApiService(TokenStorage());
+  late final auth = AuthViewModel(AuthRepository(api));
+  String? get authError => auth.error;
+
+  Future<void> restoreSession() async {
+    try {
+      final profile = await auth.restore();
+      if (profile != null) { user = profile; isLoggedIn = true; await refreshRooms(); }
+    } finally { restoring = false; notifyListeners(); }
+  }
+
 
   // =========================
   // APP DATA
   // =========================
   UserProfile user;
-  List<Room> rooms;
+  late final roomViewModel = RoomViewModel(RoomRepository(api));
+  List<Room> get rooms => roomViewModel.rooms;
+  set rooms(List<Room> value) => roomViewModel.rooms = value;
+  bool get roomsLoading => roomViewModel.loading;
+  String? get roomsError => roomViewModel.error;
+  Future<void> refreshRooms() async {
+    final pending = roomViewModel.load();
+    notifyListeners();
+    await pending;
+    notifyListeners();
+  }
   List<Booking> bookings = <Booking>[];
   List<AppNotification> notifications;
 
@@ -84,71 +112,39 @@ class AppState extends ChangeNotifier {
   // AUTH METHODS
   // =========================
 
-  /// Login menggunakan NIM atau email.
-  /// Validasi utama tetap dilakukan di LoginScreen.
-  bool login(String identifier, String password) {
-    final trimmedIdentifier = identifier.trim();
-
-    if (trimmedIdentifier.isEmpty || password.length < 6) {
-      return false;
-    }
-
-    // Jika user masih menggunakan data awal/default,
-    // simpan identifier yang digunakan untuk login.
-    if (user.name == 'Mahasiswa' &&
-        user.nim.isEmpty &&
-        user.email.isEmpty) {
-      final isNumber = RegExp(r'^\d+$').hasMatch(trimmedIdentifier);
-
-      user = user.copyWith(
-        nim: isNumber ? trimmedIdentifier : '',
-        email: trimmedIdentifier.contains('@') ? trimmedIdentifier : '',
-      );
-    }
-
-    isLoggedIn = true;
+  Future<bool> _authenticate(Future<Map<String, dynamic>> Function() action) async {
+    if (authBusy) return false;
+    authBusy = true;
     notifyListeners();
-
-    return true;
+    try {
+      final profile = await auth.authenticate(action);
+      if (profile == null) return false;
+      user = profile;
+      isLoggedIn = true;
+      await refreshRooms();
+      return true;
+    } finally { authBusy = false; notifyListeners(); }
   }
 
-  /// Registrasi user baru dan langsung masuk ke aplikasi.
-  void register(
-      String nim,
-      String name,
-      String email,
-      String studyProgram,
-      String password,
-      ) {
-    user = UserProfile(
-      nim: nim.trim(),
-      name: name.trim(),
-      email: email.trim(),
-      phone: '',
-      studyProgram: studyProgram,
-      birthDate: null,
-      gender: '',
-      address: '',
-    );
+  Future<bool> login(String identifier, String password) =>
+      _authenticate(() => auth.repository.login(identifier.trim(), password));
 
-    isLoggedIn = true;
-    notifyListeners();
-  }
+  Future<bool> register(String nim, String name, String email, String studyProgram, String password) =>
+      _authenticate(() => auth.repository.register({
+        'nim': nim, 'name': name, 'email': email, 'study_program': studyProgram,
+        'password': password, 'password_confirmation': password,
+      }));
 
-  /// Logout dan reset state aplikasi.
-  void logout() {
+  Future<void> logout() async {
+    try { await auth.repository.logout(); }
+    catch (_) { /* local token is cleared by repository finally */ }
     isLoggedIn = false;
-
-    // Reset UI state.
     tabIndex = 0;
     roomQuery = '';
-
-    // Reset data ke data awal.
     user = createInitialUser();
-    rooms = createInitialRooms();
+    roomViewModel.reset();
     bookings = <Booking>[];
     notifications = createInitialNotifications();
-
     notifyListeners();
   }
 
