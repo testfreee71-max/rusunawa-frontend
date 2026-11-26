@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_state.dart';
 import '../../core/app_text_styles.dart';
-import '../auth/login_screen.dart';
 import '../../widgets/header_scaffold.dart';
 import 'about_screen.dart';
 import 'change_password_screen.dart';
@@ -50,14 +49,9 @@ class ProfileScreen extends StatelessWidget {
 
     if (confirmed != true || !context.mounted) return;
 
-    AppState.instance.logout();
-
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute<void>(
-        builder: (_) => const LoginScreen(),
-      ),
-          (route) => false,
-    );
+    await AppState.instance.logout();
+    if (!context.mounted) return;
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   @override
