@@ -5,6 +5,8 @@ import '../services/api_service.dart';
 import '../services/token_storage.dart';
 import '../repositories/auth_repository.dart';
 import '../repositories/room_repository.dart';
+import '../repositories/booking_repository.dart';
+import '../viewmodels/booking_view_model.dart';
 import '../viewmodels/room_view_model.dart';
 import '../viewmodels/auth_view_model.dart';
 import '../models/app_notification.dart';
@@ -32,7 +34,7 @@ class AppState extends ChangeNotifier {
   Future<void> restoreSession() async {
     try {
       final profile = await auth.restore();
-      if (profile != null) { user = profile; isLoggedIn = true; await refreshRooms(); }
+      if (profile != null) { user = profile; isLoggedIn = true; await Future.wait([refreshRooms(), refreshBookings()]); }
     } finally { restoring = false; notifyListeners(); }
   }
 
@@ -52,7 +54,14 @@ class AppState extends ChangeNotifier {
     await pending;
     notifyListeners();
   }
-  List<Booking> bookings = <Booking>[];
+  late final bookingViewModel = BookingViewModel(BookingRepository(api));
+  List<Booking> get bookings => bookingViewModel.bookings;
+  Future<void> refreshBookings() async {
+    final pending = bookingViewModel.load();
+    notifyListeners();
+    await pending;
+    notifyListeners();
+  }
   List<AppNotification> notifications;
 
   // =========================
@@ -121,7 +130,7 @@ class AppState extends ChangeNotifier {
       if (profile == null) return false;
       user = profile;
       isLoggedIn = true;
-      await refreshRooms();
+      await Future.wait([refreshRooms(), refreshBookings()]);
       return true;
     } finally { authBusy = false; notifyListeners(); }
   }
@@ -143,7 +152,7 @@ class AppState extends ChangeNotifier {
     roomQuery = '';
     user = createInitialUser();
     roomViewModel.reset();
-    bookings = <Booking>[];
+    bookingViewModel.reset();
     notifications = createInitialNotifications();
     notifyListeners();
   }
@@ -217,74 +226,24 @@ class AppState extends ChangeNotifier {
   // BOOKING METHODS
   // =========================
 
-  Booking submitBooking({
+  Future<Booking> submitBooking({
     required Room room,
     required DateTime startDate,
     required DateTime endDate,
     required String purpose,
     required String note,
-  }) {
-    final booking = Booking(
-      id: 'SRN-${(bookings.length + 1).toString().padLeft(3, '0')}',
-      room: room,
-      status: BookingStatus.waiting,
-      submittedAt: DateTime.now(),
-      startDate: startDate,
-      endDate: endDate,
-      purpose: purpose,
-      note: note,
-    );
-
-    bookings = <Booking>[
-      booking,
-      ...bookings,
-    ];
-
-    // Untuk sementara, kamar dianggap tidak tersedia
-    // setelah booking dikirim.
-    rooms = rooms
-        .map(
-          (item) => item.id == room.id
-          ? item.copyWith(available: false)
-          : item,
-    )
-        .toList();
-
+  }) async {
+    String date(DateTime d) => '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    final booking = await bookingViewModel.create({
+      'room_id': room.id, 'start_date': date(startDate), 'end_date': date(endDate),
+      'purpose': purpose, 'note': note,
+    });
     notifyListeners();
-
     return booking;
   }
 
-  void cancelBooking(String id) {
-    final bookingIndex = bookings.indexWhere(
-          (item) => item.id == id,
-    );
-
-    // Hanya booking dengan status waiting yang dapat dibatalkan.
-    if (bookingIndex == -1 ||
-        bookings[bookingIndex].status != BookingStatus.waiting) {
-      return;
-    }
-
-    final cancelledBooking = bookings[bookingIndex].copyWith(
-      status: BookingStatus.cancelled,
-    );
-
-    bookings = bookings
-        .map(
-          (item) => item.id == id ? cancelledBooking : item,
-    )
-        .toList();
-
-    // Kamar tersedia kembali setelah booking dibatalkan.
-    rooms = rooms
-        .map(
-          (room) => room.id == cancelledBooking.room.id
-          ? room.copyWith(available: true)
-          : room,
-    )
-        .toList();
-
+  Future<void> cancelBooking(String id) async {
+    await bookingViewModel.cancel(id);
     notifyListeners();
   }
 }
