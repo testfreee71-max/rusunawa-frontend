@@ -49,13 +49,13 @@ class _HomeScreenState extends State<HomeScreen> {
         return Scaffold(
           backgroundColor: AppColors.background,
           // Tanpa efek stretch/bounce di ujung scroll (penyebab "goyang").
-          body: ScrollConfiguration(
+          body: RefreshIndicator(onRefresh: state.refreshRooms, child: ScrollConfiguration(
             behavior: ScrollConfiguration.of(context).copyWith(
               overscroll: false,
               physics: const ClampingScrollPhysics(),
             ),
             child: SingleChildScrollView(
-              physics: _lockScroll ? const NeverScrollableScrollPhysics() : null,
+              physics: _lockScroll ? const NeverScrollableScrollPhysics() : const AlwaysScrollableScrollPhysics(),
               child: Column(
                 children: <Widget>[
                   // Foto gedung ikut tinggi konten hero, jadi tidak ada gap biru.
@@ -82,7 +82,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
-          ),
+          )),
         );
       },
     );
@@ -532,7 +532,11 @@ class _AvailabilitySection extends StatelessWidget {
         const SizedBox(height: 10),
         SizedBox(
           height: 190,
-          child: ListView.separated(
+          child: state.roomsLoading ? const Center(child: CircularProgressIndicator())
+            : state.roomsError != null ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Text(state.roomsError!, textAlign: TextAlign.center),
+                TextButton(onPressed: state.refreshRooms, child: const Text('Coba Lagi')),
+              ])) : rooms.isEmpty ? const Center(child: Text('Belum ada kamar')) : ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
             itemCount: rooms.length,

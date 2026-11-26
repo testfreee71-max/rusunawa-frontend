@@ -31,7 +31,6 @@ class _RoomListScreenState extends State<RoomListScreen> {
   late final TextEditingController _searchController;
   _RoomFilter _filter = _RoomFilter.all;
   _RoomSort _sort = _RoomSort.name;
-  List<Room> _filteredRooms = <Room>[];
   String _lastQuery = '';
 
   @override
@@ -48,7 +47,7 @@ class _RoomListScreenState extends State<RoomListScreen> {
     super.dispose();
   }
 
-  void _applyFilters() {
+  List<Room> get _filteredRooms {
     final query = _searchController.text.trim().toLowerCase();
     var rooms = List<Room>.from(AppState.instance.rooms);
 
@@ -84,10 +83,10 @@ class _RoomListScreenState extends State<RoomListScreen> {
       });
     }
 
-    setState(() {
-      _filteredRooms = rooms;
-    });
+    return rooms;
   }
+
+  void _applyFilters() { if (mounted) setState(() {}); }
 
   void _handleSearch(String value) {
     AppState.instance.roomQuery = value;
@@ -162,14 +161,20 @@ class _RoomListScreenState extends State<RoomListScreen> {
                 ),
                 const SizedBox(height: 10),
                 Expanded(
-                  child: _filteredRooms.isEmpty
-                      ? Center(
-                    child: Text(
-                      'Kamar tidak ditemukan',
-                      style: AppTextStyles.body,
-                    ),
-                  )
+                  child: AppState.instance.roomsLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : AppState.instance.roomsError != null
+                      ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                          Text(AppState.instance.roomsError!, textAlign: TextAlign.center),
+                          TextButton(onPressed: AppState.instance.refreshRooms, child: const Text('Coba Lagi')),
+                        ]))
+                      : RefreshIndicator(onRefresh: AppState.instance.refreshRooms,
+                        child: _filteredRooms.isEmpty
+                      ? ListView(physics: const AlwaysScrollableScrollPhysics(), children: [
+                    Center(child: Text('Kamar tidak ditemukan', style: AppTextStyles.body)),
+                  ])
                       : ListView.separated(
+                    physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.only(bottom: 16),
                     itemCount: _filteredRooms.length,
                     separatorBuilder: (_, _) =>
@@ -191,7 +196,7 @@ class _RoomListScreenState extends State<RoomListScreen> {
                         },
                       );
                     },
-                  ),
+                  )),
                 ),
               ],
             ),
