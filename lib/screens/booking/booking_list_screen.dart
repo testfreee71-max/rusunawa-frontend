@@ -98,11 +98,16 @@ class _BookingContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final state = AppState.instance;
+    final vm = state.bookingViewModel;
+    if (vm.loading) return const Center(child: CircularProgressIndicator());
+    if (vm.error != null) return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Text(vm.error!), TextButton(onPressed: state.refreshBookings, child: const Text('Coba Lagi'))]));
     if (bookings.isEmpty) {
-      return _EmptyBooking(isHistory: isHistory);
+      return RefreshIndicator(onRefresh: state.refreshBookings, child: ListView(physics: const AlwaysScrollableScrollPhysics(), children: [_EmptyBooking(isHistory: isHistory)]));
     }
 
-    return ListView(
+    return RefreshIndicator(onRefresh: state.refreshBookings, child: ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
       children: <Widget>[
         Text(
@@ -115,7 +120,7 @@ class _BookingContent extends StatelessWidget {
           const SizedBox(height: 14),
         ],
       ],
-    );
+    ));
   }
 }
 

@@ -1,3 +1,5 @@
+import '../../viewmodels/booking_view_model.dart';
+import '../../viewmodels/auth_view_model.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/app_colors.dart';
@@ -44,6 +46,11 @@ class BookingFormScreen extends StatefulWidget {
 
 class _BookingFormScreenState extends State<BookingFormScreen> {
   int _step = 1;
+  bool _submitting = false;
+  Map<String, String> _fieldErrors = {};
+  Widget _fieldError(String key) => _fieldErrors.containsKey(key)
+      ? Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Text(_fieldErrors[key]!, style: const TextStyle(color: Colors.red)))
+      : const SizedBox.shrink();
 
   DateTime? _startDate;
   DateTime? _endDate;
@@ -205,6 +212,7 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
   }
 
   void _goBack() {
+    if (_submitting) return;
     if (_step > 1) {
       setState(() => _step--);
     } else {
@@ -240,7 +248,10 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
 
     if (confirmed != true || !mounted) return;
 
-    final Booking booking = AppState.instance.submitBooking(
+    if (_submitting) return;
+    setState(() { _submitting = true; _fieldErrors = {}; });
+    try {
+    final Booking booking = await AppState.instance.submitBooking(
       room: _room,
       startDate: _startDate!,
       endDate: _endDate!,
@@ -258,6 +269,13 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
         ),
       ),
     );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() { _fieldErrors = BookingViewModel.fieldErrors(e); if (_fieldErrors.isNotEmpty) _step = 2; });
+      _showMessage(AuthViewModel.message(e));
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   @override
@@ -270,7 +288,8 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
           onBack: _goBack,
           bottomBar: _BottomAction(
             step: _step,
-            onNext: _step == 3 ? _confirmBooking : _nextStep,
+            onNext: _submitting ? null : (_step == 3 ? _confirmBooking : _nextStep),
+            busy: _submitting,
           ),
           child: Column(
             children: <Widget>[
@@ -422,6 +441,7 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
       key: const ValueKey<int>(2),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
+        _fieldError('room_id'),
         Text('Pilih Periode', style: AppTextStyles.cardHeading),
         const SizedBox(height: 6),
         Text(
@@ -434,12 +454,14 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
           value: _formatDate(_startDate),
           onTap: () => _selectDate(isStart: true),
         ),
+        _fieldError('start_date'),
         const SizedBox(height: 14),
         _DateField(
           label: 'Tanggal Keluar',
           value: _formatDate(_endDate),
           onTap: () => _selectDate(isStart: false),
         ),
+        _fieldError('end_date'),
         const SizedBox(height: 14),
         Container(
           width: double.infinity,
@@ -498,6 +520,7 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
           },
         ),
         const SizedBox(height: 18),
+        _fieldError('purpose'),
         Text('Catatan (Opsional)', style: AppTextStyles.label),
         const SizedBox(height: 7),
         TextField(
@@ -509,6 +532,7 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
             hint: 'Tambahkan catatan jika diperlukan',
           ),
         ),
+        _fieldError('note'),
       ],
     );
   }
@@ -977,10 +1001,12 @@ class _BottomAction extends StatelessWidget {
   const _BottomAction({
     required this.step,
     required this.onNext,
+    required this.busy,
   });
 
   final int step;
-  final VoidCallback onNext;
+  final VoidCallback? onNext;
+  final bool busy;
 
   @override
   Widget build(BuildContext context) {
@@ -1013,7 +1039,7 @@ class _BottomAction extends StatelessWidget {
               ),
             ),
             child: Text(
-              isConfirmation ? 'Konfirmasi' : 'Lanjut',
+              busy ? 'Mengirim...' : (isConfirmation ? 'Konfirmasi' : 'Lanjut'),
               style: AppTextStyles.button.copyWith(color: Colors.white),
             ),
           ),
