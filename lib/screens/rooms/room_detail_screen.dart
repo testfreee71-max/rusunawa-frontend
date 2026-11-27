@@ -181,7 +181,30 @@ class _ImageGallery extends StatelessWidget {
                   iconColor: room.isFavorite
                       ? AppColors.favorite
                       : AppColors.primary,
-                  onTap: () => AppState.instance.toggleFavorite(room.id),
+                  onTap: () async {
+                    final state = AppState.instance;
+
+                    if (state.favoriteBusy ||
+                        state.roomsLoading ||
+                        !state.isLoggedIn) {
+                      return;
+                    }
+
+                    final success = await state.toggleFavorite(room.id);
+
+                    if (!context.mounted) return;
+
+                    if (!success) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            state.favoriteError ??
+                                'Gagal mengubah favorit.',
+                          ),
+                        ),
+                      );
+                    }
+                  },
                 ),
                 const SizedBox(width: 8),
                 _CircleAction(

@@ -313,26 +313,62 @@ class _FavoriteButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final icon = Icon(
-      room.isFavorite
-          ? Icons.favorite_rounded
-          : Icons.favorite_border_rounded,
-      size: iconSize,
-      color: room.isFavorite ? AppColors.favorite : AppColors.favoriteOff,
-    );
+    final state = AppState.instance;
 
-    return Material(
-      color: showBackground ? AppColors.surface : Colors.transparent,
-      shape: const CircleBorder(),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: () => AppState.instance.toggleFavorite(room.id),
-        child: SizedBox(
-          width: size,
-          height: size,
-          child: Center(child: icon),
-        ),
-      ),
+    return ListenableBuilder(
+      listenable: state,
+      builder: (context, _) {
+        final isFavorite = state.rooms.any(
+              (item) => item.id == room.id && item.isFavorite,
+        );
+
+        final icon = Icon(
+          isFavorite
+              ? Icons.favorite_rounded
+              : Icons.favorite_border_rounded,
+          size: iconSize,
+          color: isFavorite
+              ? AppColors.favorite
+              : AppColors.favoriteOff,
+        );
+
+        return Material(
+          color: showBackground
+              ? AppColors.surface
+              : Colors.transparent,
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: state.favoriteBusy ||
+                state.roomsLoading ||
+                !state.isLoggedIn
+                ? null
+                : () async {
+              final success =
+              await state.toggleFavorite(room.id);
+
+              if (!context.mounted) return;
+
+              if (!success) {
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      state.favoriteError ??
+                          'Gagal mengubah favorit.',
+                    ),
+                  ),
+                );
+              }
+            },
+            child: SizedBox(
+              width: size,
+              height: size,
+              child: Center(child: icon),
+            ),
+          ),
+        );
+      },
     );
   }
 }
