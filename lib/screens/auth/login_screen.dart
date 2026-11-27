@@ -34,7 +34,9 @@ class _LoginScreenState extends State<LoginScreen> {
     if (_busy || !_formKey.currentState!.validate()) return;
     setState(() => _busy = true);
     final success = await AppState.instance.login(
-      _identifierController.text.trim(), _passwordController.text,
+      _identifierController.text.trim(),
+      _passwordController.text,
+      rememberMe: _rememberMe,
     );
     if (!mounted) return;
     setState(() => _busy = false);
