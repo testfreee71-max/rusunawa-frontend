@@ -194,16 +194,24 @@ class AppState extends ChangeNotifier {
   // ROOM METHODS
   // =========================
 
-  void toggleFavorite(String roomId) {
-    rooms = rooms
-        .map(
-          (room) => room.id == roomId
-          ? room.copyWith(isFavorite: !room.isFavorite)
-          : room,
-    )
-        .toList();
+  bool get favoriteBusy => roomViewModel.favoriteBusy;
+
+  String? get favoriteError => roomViewModel.favoriteError;
+
+  Future<bool> toggleFavorite(String roomId) async {
+    if (!isLoggedIn || favoriteBusy || roomsLoading) {
+      return false;
+    }
+
+    final pending = roomViewModel.toggleFavorite(roomId);
 
     notifyListeners();
+
+    final success = await pending;
+
+    notifyListeners();
+
+    return success;
   }
 
   // =========================
