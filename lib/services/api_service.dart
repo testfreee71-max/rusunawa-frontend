@@ -17,7 +17,7 @@ class ApiService {
   }
   final TokenStorage storage;
   final Dio dio = Dio(BaseOptions(
-    baseUrl: const String.fromEnvironment('API_BASE_URL', defaultValue: 'http://127.0.0.1:8000/api/'),
+    baseUrl: const String.fromEnvironment('API_BASE_URL', defaultValue: 'http://10.0.2.2:8000/api/'),
     connectTimeout: const Duration(seconds: 10),
     receiveTimeout: const Duration(seconds: 15),
     headers: {'Accept': 'application/json', 'Content-Type': 'application/json'},
