@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 
 import 'core/app_colors.dart';
 import 'core/app_state.dart';
@@ -8,7 +9,8 @@ import 'screens/main_shell.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const SiRunaApp());
+  runApp(ChangeNotifierProvider.value(value: AppState.instance, child: const SiRunaApp()));
+  AppState.instance.restoreSession();
 }
 
 class SiRunaApp extends StatelessWidget {
@@ -30,7 +32,9 @@ class SiRunaApp extends StatelessWidget {
             ),
             textTheme: GoogleFonts.poppinsTextTheme(),
           ),
-          home: AppState.instance.isLoggedIn
+          home: AppState.instance.restoring
+              ? const Scaffold(body: Center(child: CircularProgressIndicator()))
+              : AppState.instance.isLoggedIn
               ? const MainShell()
               : const LoginScreen(),
         );

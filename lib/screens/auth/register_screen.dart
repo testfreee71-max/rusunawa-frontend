@@ -55,7 +55,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  void _register() {
+  bool _busy = false;
+  Future<void> _register() async {
+    if (_busy) return;
     final valid = _formKey.currentState!.validate();
 
     if (!_acceptedTerms) {
@@ -71,7 +73,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
 
-    AppState.instance.register(
+    setState(() => _busy = true);
+    final success = await AppState.instance.register(
       _nimController.text.trim(),
       _nameController.text.trim(),
       _emailController.text.trim(),
@@ -79,6 +82,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _passwordController.text,
     );
 
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppState.instance.authError ?? 'Registrasi gagal')));
+      return;
+    }
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
@@ -196,6 +205,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 AppButton(
                   label: 'Daftar',
                   onPressed: _register,
+                  isLoading: _busy,
                 ),
               ],
             ),

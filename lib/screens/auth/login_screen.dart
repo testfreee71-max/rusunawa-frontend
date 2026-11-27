@@ -5,7 +5,6 @@ import '../../core/app_state.dart';
 import '../../core/app_text_styles.dart';
 import '../../widgets/app_button.dart';
 import '../../widgets/app_text_field.dart';
-import '../main_shell.dart';
 import 'forgot_password_screen.dart';
 import 'register_screen.dart';
 
@@ -30,26 +29,20 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _login() {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
-
-    final success = AppState.instance.login(
-      _identifierController.text.trim(),
-      _passwordController.text,
+  bool _busy = false;
+  Future<void> _login() async {
+    if (_busy || !_formKey.currentState!.validate()) return;
+    setState(() => _busy = true);
+    final success = await AppState.instance.login(
+      _identifierController.text.trim(), _passwordController.text,
     );
-
+    if (!mounted) return;
+    setState(() => _busy = false);
     if (!success) {
-      return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(AppState.instance.authError ?? 'Login gagal'),
+      ));
     }
-
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute<void>(
-        builder: (_) => const MainShell(),
-      ),
-          (route) => false,
-    );
   }
 
   @override
@@ -215,6 +208,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         AppButton(
                           label: 'Masuk',
                           onPressed: _login,
+                          isLoading: _busy,
                         ),
 
                         const SizedBox(height: 24),

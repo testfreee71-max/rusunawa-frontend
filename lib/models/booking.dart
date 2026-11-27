@@ -40,6 +40,17 @@ class Booking {
     required this.note,
   });
 
+  factory Booking.fromJson(Map<String, dynamic> json) => Booking(
+    id: json['id'].toString(),
+    room: Room.fromJson(Map<String, dynamic>.from(json['room'] as Map)),
+    status: BookingStatus.values.byName(json['status'].toString()),
+    submittedAt: DateTime.parse(json['submitted_at'].toString()).toLocal(),
+    startDate: DateTime.parse(json['start_date'].toString()),
+    endDate: DateTime.parse(json['end_date'].toString()),
+    purpose: json['purpose']?.toString() ?? '',
+    note: json['note']?.toString() ?? '',
+  );
+
   final String id;
   final Room room;
   final BookingStatus status;

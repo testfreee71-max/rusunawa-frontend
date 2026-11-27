@@ -1,6 +1,14 @@
 import 'package:flutter/foundation.dart';
 
 import '../data/initial_data.dart';
+import '../services/api_service.dart';
+import '../services/token_storage.dart';
+import '../repositories/auth_repository.dart';
+import '../repositories/room_repository.dart';
+import '../repositories/booking_repository.dart';
+import '../viewmodels/booking_view_model.dart';
+import '../viewmodels/room_view_model.dart';
+import '../viewmodels/auth_view_model.dart';
 import '../models/app_notification.dart';
 import '../models/booking.dart';
 import '../models/room.dart';
@@ -9,7 +17,6 @@ import '../models/user_profile.dart';
 class AppState extends ChangeNotifier {
   AppState._()
       : user = createInitialUser(),
-        rooms = createInitialRooms(),
         notifications = createInitialNotifications();
 
   static final AppState instance = AppState._();
@@ -18,13 +25,43 @@ class AppState extends ChangeNotifier {
   // AUTH STATE
   // =========================
   bool isLoggedIn = false;
+  bool authBusy = false;
+  bool restoring = true;
+  final api = ApiService(TokenStorage());
+  late final auth = AuthViewModel(AuthRepository(api));
+  String? get authError => auth.error;
+
+  Future<void> restoreSession() async {
+    try {
+      final profile = await auth.restore();
+      if (profile != null) { user = profile; isLoggedIn = true; await Future.wait([refreshRooms(), refreshBookings()]); }
+    } finally { restoring = false; notifyListeners(); }
+  }
+
 
   // =========================
   // APP DATA
   // =========================
   UserProfile user;
-  List<Room> rooms;
-  List<Booking> bookings = <Booking>[];
+  late final roomViewModel = RoomViewModel(RoomRepository(api));
+  List<Room> get rooms => roomViewModel.rooms;
+  set rooms(List<Room> value) => roomViewModel.rooms = value;
+  bool get roomsLoading => roomViewModel.loading;
+  String? get roomsError => roomViewModel.error;
+  Future<void> refreshRooms() async {
+    final pending = roomViewModel.load();
+    notifyListeners();
+    await pending;
+    notifyListeners();
+  }
+  late final bookingViewModel = BookingViewModel(BookingRepository(api));
+  List<Booking> get bookings => bookingViewModel.bookings;
+  Future<void> refreshBookings() async {
+    final pending = bookingViewModel.load();
+    notifyListeners();
+    await pending;
+    notifyListeners();
+  }
   List<AppNotification> notifications;
 
   // =========================
@@ -84,71 +121,39 @@ class AppState extends ChangeNotifier {
   // AUTH METHODS
   // =========================
 
-  /// Login menggunakan NIM atau email.
-  /// Validasi utama tetap dilakukan di LoginScreen.
-  bool login(String identifier, String password) {
-    final trimmedIdentifier = identifier.trim();
-
-    if (trimmedIdentifier.isEmpty || password.length < 6) {
-      return false;
-    }
-
-    // Jika user masih menggunakan data awal/default,
-    // simpan identifier yang digunakan untuk login.
-    if (user.name == 'Mahasiswa' &&
-        user.nim.isEmpty &&
-        user.email.isEmpty) {
-      final isNumber = RegExp(r'^\d+$').hasMatch(trimmedIdentifier);
-
-      user = user.copyWith(
-        nim: isNumber ? trimmedIdentifier : '',
-        email: trimmedIdentifier.contains('@') ? trimmedIdentifier : '',
-      );
-    }
-
-    isLoggedIn = true;
+  Future<bool> _authenticate(Future<Map<String, dynamic>> Function() action) async {
+    if (authBusy) return false;
+    authBusy = true;
     notifyListeners();
-
-    return true;
+    try {
+      final profile = await auth.authenticate(action);
+      if (profile == null) return false;
+      user = profile;
+      isLoggedIn = true;
+      await Future.wait([refreshRooms(), refreshBookings()]);
+      return true;
+    } finally { authBusy = false; notifyListeners(); }
   }
 
-  /// Registrasi user baru dan langsung masuk ke aplikasi.
-  void register(
-      String nim,
-      String name,
-      String email,
-      String studyProgram,
-      String password,
-      ) {
-    user = UserProfile(
-      nim: nim.trim(),
-      name: name.trim(),
-      email: email.trim(),
-      phone: '',
-      studyProgram: studyProgram,
-      birthDate: null,
-      gender: '',
-      address: '',
-    );
+  Future<bool> login(String identifier, String password) =>
+      _authenticate(() => auth.repository.login(identifier.trim(), password));
 
-    isLoggedIn = true;
-    notifyListeners();
-  }
+  Future<bool> register(String nim, String name, String email, String studyProgram, String password) =>
+      _authenticate(() => auth.repository.register({
+        'nim': nim, 'name': name, 'email': email, 'study_program': studyProgram,
+        'password': password, 'password_confirmation': password,
+      }));
 
-  /// Logout dan reset state aplikasi.
-  void logout() {
+  Future<void> logout() async {
+    try { await auth.repository.logout(); }
+    catch (_) { /* local token is cleared by repository finally */ }
     isLoggedIn = false;
-
-    // Reset UI state.
     tabIndex = 0;
     roomQuery = '';
-
-    // Reset data ke data awal.
     user = createInitialUser();
-    rooms = createInitialRooms();
-    bookings = <Booking>[];
+    roomViewModel.reset();
+    bookingViewModel.reset();
     notifications = createInitialNotifications();
-
     notifyListeners();
   }
 
@@ -221,74 +226,24 @@ class AppState extends ChangeNotifier {
   // BOOKING METHODS
   // =========================
 
-  Booking submitBooking({
+  Future<Booking> submitBooking({
     required Room room,
     required DateTime startDate,
     required DateTime endDate,
     required String purpose,
     required String note,
-  }) {
-    final booking = Booking(
-      id: 'SRN-${(bookings.length + 1).toString().padLeft(3, '0')}',
-      room: room,
-      status: BookingStatus.waiting,
-      submittedAt: DateTime.now(),
-      startDate: startDate,
-      endDate: endDate,
-      purpose: purpose,
-      note: note,
-    );
-
-    bookings = <Booking>[
-      booking,
-      ...bookings,
-    ];
-
-    // Untuk sementara, kamar dianggap tidak tersedia
-    // setelah booking dikirim.
-    rooms = rooms
-        .map(
-          (item) => item.id == room.id
-          ? item.copyWith(available: false)
-          : item,
-    )
-        .toList();
-
+  }) async {
+    String date(DateTime d) => '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    final booking = await bookingViewModel.create({
+      'room_id': room.id, 'start_date': date(startDate), 'end_date': date(endDate),
+      'purpose': purpose, 'note': note,
+    });
     notifyListeners();
-
     return booking;
   }
 
-  void cancelBooking(String id) {
-    final bookingIndex = bookings.indexWhere(
-          (item) => item.id == id,
-    );
-
-    // Hanya booking dengan status waiting yang dapat dibatalkan.
-    if (bookingIndex == -1 ||
-        bookings[bookingIndex].status != BookingStatus.waiting) {
-      return;
-    }
-
-    final cancelledBooking = bookings[bookingIndex].copyWith(
-      status: BookingStatus.cancelled,
-    );
-
-    bookings = bookings
-        .map(
-          (item) => item.id == id ? cancelledBooking : item,
-    )
-        .toList();
-
-    // Kamar tersedia kembali setelah booking dibatalkan.
-    rooms = rooms
-        .map(
-          (room) => room.id == cancelledBooking.room.id
-          ? room.copyWith(available: true)
-          : room,
-    )
-        .toList();
-
+  Future<void> cancelBooking(String id) async {
+    await bookingViewModel.cancel(id);
     notifyListeners();
   }
 }

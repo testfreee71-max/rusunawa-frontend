@@ -1,3 +1,4 @@
+import '../../viewmodels/auth_view_model.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/app_colors.dart';
@@ -52,7 +53,13 @@ class BookingDetailScreen extends StatelessWidget {
 
     if (confirmed != true || !context.mounted) return;
 
-    AppState.instance.cancelBooking(booking.id);
+    try {
+      await AppState.instance.cancelBooking(booking.id);
+    } catch (e) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AuthViewModel.message(e))));
+      return;
+    }
+    if (!context.mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
