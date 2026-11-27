@@ -135,8 +135,18 @@ class AppState extends ChangeNotifier {
     } finally { authBusy = false; notifyListeners(); }
   }
 
-  Future<bool> login(String identifier, String password) =>
-      _authenticate(() => auth.repository.login(identifier.trim(), password));
+  Future<bool> login(
+      String identifier,
+      String password, {
+        bool rememberMe = true,
+      }) =>
+      _authenticate(
+            () => auth.repository.login(
+          identifier.trim(),
+          password,
+          rememberMe: rememberMe,
+        ),
+      );
 
   Future<bool> register(String nim, String name, String email, String studyProgram, String password) =>
       _authenticate(() => auth.repository.register({
