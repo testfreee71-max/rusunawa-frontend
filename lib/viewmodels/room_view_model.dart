@@ -14,7 +14,19 @@ class RoomViewModel {
   bool favoriteBusy = false;
   String? favoriteError;
 
+  bool filterLoading = false;
+  String? filterError;
+  List<Room> filteredRooms = [];
+
   int _generation = 0;
+  int _filterGeneration = 0;
+
+  void resetFilters() {
+    _filterGeneration++;
+    filteredRooms = [];
+    filterLoading = false;
+    filterError = null;
+  }
 
   void reset() {
     _generation++;
@@ -23,6 +35,7 @@ class RoomViewModel {
     error = null;
     favoriteBusy = false;
     favoriteError = null;
+    resetFilters();
   }
 
   Future<void> load() async {
@@ -34,9 +47,7 @@ class RoomViewModel {
     error = null;
 
     try {
-      final result = (await repository.list())
-          .map(Room.fromJson)
-          .toList();
+      final result = (await repository.list()).map(Room.fromJson).toList();
 
       if (generation == _generation) {
         rooms = result;
@@ -52,12 +63,51 @@ class RoomViewModel {
     }
   }
 
+  Future<void> loadFiltered({
+    String? building,
+    int? minCapacity,
+    String? gender,
+    bool? available,
+    String? sort,
+  }) async {
+    final generation = ++_filterGeneration;
+
+    filterLoading = true;
+    filterError = null;
+
+    try {
+      final result = (await repository.list(
+        building: building,
+        minCapacity: minCapacity,
+        gender: gender,
+        available: available,
+        sort: sort,
+      )).map(Room.fromJson).toList();
+
+      if (generation == _filterGeneration) {
+        filteredRooms = result.map((room) {
+          final index = rooms.indexWhere((item) => item.id == room.id);
+
+          return index == -1
+              ? room
+              : room.copyWith(isFavorite: rooms[index].isFavorite);
+        }).toList();
+      }
+    } catch (e) {
+      if (generation == _filterGeneration) {
+        filterError = AuthViewModel.message(e);
+      }
+    } finally {
+      if (generation == _filterGeneration) {
+        filterLoading = false;
+      }
+    }
+  }
+
   Future<bool> toggleFavorite(String roomId) async {
     if (favoriteBusy || loading) return false;
 
-    final index = rooms.indexWhere(
-          (room) => room.id == roomId,
-    );
+    final index = rooms.indexWhere((room) => room.id == roomId);
 
     if (index == -1) return false;
 
@@ -77,6 +127,12 @@ class RoomViewModel {
       if (generation != _generation) return false;
 
       rooms = rooms.map((room) {
+        return room.id == roomId
+            ? room.copyWith(isFavorite: !wasFavorite)
+            : room;
+      }).toList();
+
+      filteredRooms = filteredRooms.map((room) {
         return room.id == roomId
             ? room.copyWith(isFavorite: !wasFavorite)
             : room;
