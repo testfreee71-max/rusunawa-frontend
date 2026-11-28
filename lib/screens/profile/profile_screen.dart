@@ -209,11 +209,10 @@ class _MenuCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-      ),
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(16),
+      clipBehavior: Clip.antiAlias,
       child: Column(children: children),
     );
   }
@@ -249,9 +248,9 @@ class _ProfileMenuItem extends StatelessWidget {
       ),
       trailing: showChevron
           ? Icon(
-        Icons.chevron_right_rounded,
-        color: AppColors.textMuted,
-      )
+              Icons.chevron_right_rounded,
+              color: AppColors.textMuted,
+            )
           : null,
     );
   }
