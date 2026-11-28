@@ -21,6 +21,9 @@ class _BookingListScreenState extends State<BookingListScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) AppState.instance.refreshBookings();
+    });
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) {
@@ -47,9 +50,7 @@ class _BookingListScreenState extends State<BookingListScreen>
           title: 'Booking Saya',
           onBack: () => AppState.instance.setTab(0),
           child: ClipRRect(
-            borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(28),
-            ),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
             child: Column(
               children: <Widget>[
                 Container(
@@ -88,10 +89,7 @@ class _BookingListScreenState extends State<BookingListScreen>
 }
 
 class _BookingContent extends StatelessWidget {
-  const _BookingContent({
-    required this.bookings,
-    required this.isHistory,
-  });
+  const _BookingContent({required this.bookings, required this.isHistory});
 
   final List<Booking> bookings;
   final bool isHistory;
@@ -101,26 +99,47 @@ class _BookingContent extends StatelessWidget {
     final state = AppState.instance;
     final vm = state.bookingViewModel;
     if (vm.loading) return const Center(child: CircularProgressIndicator());
-    if (vm.error != null) return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Text(vm.error!), TextButton(onPressed: state.refreshBookings, child: const Text('Coba Lagi'))]));
+    if (vm.error != null)
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(vm.error!),
+            TextButton(
+              onPressed: state.refreshBookings,
+              child: const Text('Coba Lagi'),
+            ),
+          ],
+        ),
+      );
     if (bookings.isEmpty) {
-      return RefreshIndicator(onRefresh: state.refreshBookings, child: ListView(physics: const AlwaysScrollableScrollPhysics(), children: [_EmptyBooking(isHistory: isHistory)]));
+      return RefreshIndicator(
+        onRefresh: state.refreshBookings,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [_EmptyBooking(isHistory: isHistory)],
+        ),
+      );
     }
 
-    return RefreshIndicator(onRefresh: state.refreshBookings, child: ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(16),
-      children: <Widget>[
-        Text(
-          isHistory ? 'Riwayat Booking' : 'Booking Aktif',
-          style: AppTextStyles.sectionTitle,
-        ),
-        const SizedBox(height: 12),
-        for (final booking in bookings) ...<Widget>[
-          _BookingCard(booking: booking, isHistory: isHistory),
-          const SizedBox(height: 14),
+    return RefreshIndicator(
+      onRefresh: state.refreshBookings,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        children: <Widget>[
+          Text(
+            isHistory ? 'Riwayat Booking' : 'Booking Aktif',
+            style: AppTextStyles.sectionTitle,
+          ),
+          const SizedBox(height: 12),
+          for (final booking in bookings) ...<Widget>[
+            _BookingCard(booking: booking, isHistory: isHistory),
+            const SizedBox(height: 14),
+          ],
         ],
-      ],
-    ));
+      ),
+    );
   }
 }
 
@@ -138,17 +157,12 @@ class _EmptyBooking extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             Icon(
-              isHistory
-                  ? Icons.history_rounded
-                  : Icons.calendar_month_outlined,
+              isHistory ? Icons.history_rounded : Icons.calendar_month_outlined,
               size: 64,
               color: AppColors.placeholder,
             ),
             const SizedBox(height: 16),
-            Text(
-              'Belum ada booking',
-              style: AppTextStyles.cardTitle,
-            ),
+            Text('Belum ada booking', style: AppTextStyles.cardTitle),
             const SizedBox(height: 6),
             Text(
               isHistory
@@ -176,23 +190,32 @@ class _EmptyBooking extends StatelessWidget {
 }
 
 class _BookingCard extends StatelessWidget {
-  const _BookingCard({
-    required this.booking,
-    required this.isHistory,
-  });
+  const _BookingCard({required this.booking, required this.isHistory});
 
   final Booking booking;
   final bool isHistory;
 
   String _formatDate(DateTime date) {
     const months = <String>[
-      'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-      'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'Mei',
+      'Jun',
+      'Jul',
+      'Agu',
+      'Sep',
+      'Okt',
+      'Nov',
+      'Des',
     ];
     return '${date.day} ${months[date.month - 1]} ${date.year}';
   }
 
-  void _openDetail(BuildContext context) {
+  Future<void> _openDetail(BuildContext context) async {
+    await AppState.instance.refreshBookings();
+    if (!context.mounted) return;
     Navigator.push(
       context,
       MaterialPageRoute<void>(
@@ -234,17 +257,17 @@ class _BookingCard extends StatelessWidget {
                     height: 78,
                     child: booking.room.images.isNotEmpty
                         ? Image.network(
-                      booking.room.images.first,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => Container(
-                        color: AppColors.placeholder,
-                        child: const Icon(Icons.image_outlined),
-                      ),
-                    )
+                            booking.room.images.first,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, _, _) => Container(
+                              color: AppColors.placeholder,
+                              child: const Icon(Icons.image_outlined),
+                            ),
+                          )
                         : Container(
-                      color: AppColors.placeholder,
-                      child: const Icon(Icons.image_outlined),
-                    ),
+                            color: AppColors.placeholder,
+                            child: const Icon(Icons.image_outlined),
+                          ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -252,10 +275,7 @@ class _BookingCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      Text(
-                        booking.room.name,
-                        style: AppTextStyles.cardTitle,
-                      ),
+                      Text(booking.room.name, style: AppTextStyles.cardTitle),
                       const SizedBox(height: 3),
                       Text(
                         '${booking.room.building} • Lantai ${booking.room.floor}',
@@ -277,13 +297,10 @@ class _BookingCard extends StatelessWidget {
             _InfoRow(
               label: 'Periode',
               value:
-              '${_formatDate(booking.startDate)} - ${_formatDate(booking.endDate)}',
+                  '${_formatDate(booking.startDate)} - ${_formatDate(booking.endDate)}',
             ),
             const SizedBox(height: 7),
-            _InfoRow(
-              label: 'Keperluan',
-              value: booking.purpose,
-            ),
+            _InfoRow(label: 'Keperluan', value: booking.purpose),
             if (!isHistory) ...<Widget>[
               const SizedBox(height: 18),
               _BookingProgress(status: booking.status),
@@ -293,10 +310,7 @@ class _BookingCard extends StatelessWidget {
             const SizedBox(height: 8),
             Row(
               children: <Widget>[
-                Text(
-                  'ID: ${booking.id}',
-                  style: AppTextStyles.bodySmallBold,
-                ),
+                Text('ID: ${booking.id}', style: AppTextStyles.bodySmallBold),
                 const Spacer(),
                 TextButton(
                   onPressed: () => _openDetail(context),
@@ -317,10 +331,7 @@ class _BookingCard extends StatelessWidget {
 }
 
 class _InfoRow extends StatelessWidget {
-  const _InfoRow({
-    required this.label,
-    required this.value,
-  });
+  const _InfoRow({required this.label, required this.value});
 
   final String label;
   final String value;
@@ -329,10 +340,7 @@ class _InfoRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: <Widget>[
-        Expanded(
-          flex: 2,
-          child: Text(label, style: AppTextStyles.bodySmall),
-        ),
+        Expanded(flex: 2, child: Text(label, style: AppTextStyles.bodySmall)),
         Expanded(
           flex: 3,
           child: Text(
@@ -418,11 +426,7 @@ class _BookingProgress extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const labels = <String>[
-      'Diajukan',
-      'Diproses',
-      'Disetujui',
-    ];
+    const labels = <String>['Diajukan', 'Diproses', 'Disetujui'];
 
     final progress = _progress;
 
@@ -440,9 +444,7 @@ class _BookingProgress extends StatelessWidget {
                     height: 22,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: done
-                          ? AppColors.primary
-                          : AppColors.placeholder,
+                      color: done ? AppColors.primary : AppColors.placeholder,
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
