@@ -6,6 +6,7 @@ import '../../core/app_text_styles.dart';
 import '../../models/app_notification.dart';
 
 void showNotificationSheet(BuildContext context) {
+  AppState.instance.refreshNotifications();
   showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -104,11 +105,7 @@ class _NotificationCard extends StatelessWidget {
                   color: visual.background,
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(
-                  visual.icon,
-                  size: 17,
-                  color: visual.foreground,
-                ),
+                child: Icon(visual.icon, size: 17, color: visual.foreground),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -191,11 +188,7 @@ _NotificationVisual _notificationVisual(NotificationType type) {
 }
 
 class _NotificationVisual {
-  const _NotificationVisual(
-      this.icon,
-      this.background,
-      this.foreground,
-      );
+  const _NotificationVisual(this.icon, this.background, this.foreground);
 
   final IconData icon;
   final Color background;

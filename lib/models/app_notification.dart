@@ -1,8 +1,4 @@
-enum NotificationType {
-  approved,
-  document,
-  processing,
-}
+enum NotificationType { approved, document, processing }
 
 class AppNotification {
   const AppNotification({
@@ -14,6 +10,24 @@ class AppNotification {
     required this.isRead,
   });
 
+  factory AppNotification.fromJson(Map<String, dynamic> json) {
+    final date = DateTime.tryParse(
+      json["created_at"]?.toString() ?? "",
+    )?.toLocal();
+    final time = date == null ? "-" : "${date.day}/${date.month}/${date.year}";
+    return AppNotification(
+      id: json["id"].toString(),
+      title: json["title"]?.toString() ?? "",
+      message: json["message"]?.toString() ?? "",
+      type: switch (json["type"]) {
+        "approved" => NotificationType.approved,
+        "document" => NotificationType.document,
+        _ => NotificationType.processing,
+      },
+      time: time,
+      isRead: json["is_read"] == true || json["is_read"] == 1,
+    );
+  }
   final String id;
   final String title;
   final String message;

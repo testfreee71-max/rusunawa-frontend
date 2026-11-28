@@ -6,6 +6,7 @@ import '../services/token_storage.dart';
 import '../repositories/auth_repository.dart';
 import '../repositories/room_repository.dart';
 import '../repositories/booking_repository.dart';
+import '../repositories/notification_repository.dart';
 import '../viewmodels/booking_view_model.dart';
 import '../viewmodels/room_view_model.dart';
 import '../viewmodels/auth_view_model.dart';
@@ -16,8 +17,8 @@ import '../models/user_profile.dart';
 
 class AppState extends ChangeNotifier {
   AppState._()
-      : user = createInitialUser(),
-        notifications = createInitialNotifications();
+    : user = createInitialUser(),
+      notifications = createInitialNotifications();
 
   static final AppState instance = AppState._();
 
@@ -34,10 +35,20 @@ class AppState extends ChangeNotifier {
   Future<void> restoreSession() async {
     try {
       final profile = await auth.restore();
-      if (profile != null) { user = profile; isLoggedIn = true; await Future.wait([refreshRooms(), refreshBookings()]); }
-    } finally { restoring = false; notifyListeners(); }
+      if (profile != null) {
+        user = profile;
+        isLoggedIn = true;
+        await Future.wait([
+          refreshRooms(),
+          refreshBookings(),
+          refreshNotifications(),
+        ]);
+      }
+    } finally {
+      restoring = false;
+      notifyListeners();
+    }
   }
-
 
   // =========================
   // APP DATA
@@ -54,6 +65,7 @@ class AppState extends ChangeNotifier {
     await pending;
     notifyListeners();
   }
+
   late final bookingViewModel = BookingViewModel(BookingRepository(api));
   List<Booking> get bookings => bookingViewModel.bookings;
   Future<void> refreshBookings() async {
@@ -62,7 +74,23 @@ class AppState extends ChangeNotifier {
     await pending;
     notifyListeners();
   }
+
   List<AppNotification> notifications;
+  late final notificationRepository = NotificationRepository(api);
+  String? notificationError;
+  Future<void> refreshNotifications() async {
+    if (!isLoggedIn) return;
+    try {
+      final data = await notificationRepository.list();
+      if (!isLoggedIn) return;
+      notifications = data.map(AppNotification.fromJson).toList();
+      notificationError = null;
+    } catch (e) {
+      notificationError = e.toString();
+      debugPrint("Notification error: $e");
+    }
+    notifyListeners();
+  }
 
   // =========================
   // UI STATE
@@ -89,9 +117,9 @@ class AppState extends ChangeNotifier {
     return bookings
         .where(
           (booking) =>
-      booking.status == BookingStatus.waiting ||
-          booking.status == BookingStatus.processing,
-    )
+              booking.status == BookingStatus.waiting ||
+              booking.status == BookingStatus.processing,
+        )
         .length;
   }
 
@@ -99,10 +127,10 @@ class AppState extends ChangeNotifier {
     return bookings
         .where(
           (booking) =>
-      booking.status == BookingStatus.waiting ||
-          booking.status == BookingStatus.processing ||
-          booking.status == BookingStatus.approved,
-    )
+              booking.status == BookingStatus.waiting ||
+              booking.status == BookingStatus.processing ||
+              booking.status == BookingStatus.approved,
+        )
         .toList();
   }
 
@@ -110,10 +138,10 @@ class AppState extends ChangeNotifier {
     return bookings
         .where(
           (booking) =>
-      booking.status == BookingStatus.completed ||
-          booking.status == BookingStatus.rejected ||
-          booking.status == BookingStatus.cancelled,
-    )
+              booking.status == BookingStatus.completed ||
+              booking.status == BookingStatus.rejected ||
+              booking.status == BookingStatus.cancelled,
+        )
         .toList();
   }
 
@@ -121,7 +149,9 @@ class AppState extends ChangeNotifier {
   // AUTH METHODS
   // =========================
 
-  Future<bool> _authenticate(Future<Map<String, dynamic>> Function() action) async {
+  Future<bool> _authenticate(
+    Future<Map<String, dynamic>> Function() action,
+  ) async {
     if (authBusy) return false;
     authBusy = true;
     notifyListeners();
@@ -130,33 +160,53 @@ class AppState extends ChangeNotifier {
       if (profile == null) return false;
       user = profile;
       isLoggedIn = true;
-      await Future.wait([refreshRooms(), refreshBookings()]);
+      await Future.wait([
+        refreshRooms(),
+        refreshBookings(),
+        refreshNotifications(),
+      ]);
       return true;
-    } finally { authBusy = false; notifyListeners(); }
+    } finally {
+      authBusy = false;
+      notifyListeners();
+    }
   }
 
   Future<bool> login(
-      String identifier,
-      String password, {
-        bool rememberMe = true,
-      }) =>
-      _authenticate(
-            () => auth.repository.login(
-          identifier.trim(),
-          password,
-          rememberMe: rememberMe,
-        ),
-      );
+    String identifier,
+    String password, {
+    bool rememberMe = true,
+  }) => _authenticate(
+    () => auth.repository.login(
+      identifier.trim(),
+      password,
+      rememberMe: rememberMe,
+    ),
+  );
 
-  Future<bool> register(String nim, String name, String email, String studyProgram, String password) =>
-      _authenticate(() => auth.repository.register({
-        'nim': nim, 'name': name, 'email': email, 'study_program': studyProgram,
-        'password': password, 'password_confirmation': password,
-      }));
+  Future<bool> register(
+    String nim,
+    String name,
+    String email,
+    String studyProgram,
+    String password,
+  ) => _authenticate(
+    () => auth.repository.register({
+      'nim': nim,
+      'name': name,
+      'email': email,
+      'study_program': studyProgram,
+      'password': password,
+      'password_confirmation': password,
+    }),
+  );
 
   Future<void> logout() async {
-    try { await auth.repository.logout(); }
-    catch (_) { /* local token is cleared by repository finally */ }
+    try {
+      await auth.repository.logout();
+    } catch (_) {
+      /* local token is cleared by repository finally */
+    }
     isLoggedIn = false;
     tabIndex = 0;
     roomQuery = '';
@@ -218,26 +268,28 @@ class AppState extends ChangeNotifier {
   // NOTIFICATION METHODS
   // =========================
 
-  void markNotificationRead(String id) {
-    notifications = notifications
-        .map(
-          (item) => item.id == id
-          ? item.copyWith(isRead: true)
-          : item,
-    )
-        .toList();
-
-    notifyListeners();
+  Future<void> markNotificationRead(String id) async {
+    if (!isLoggedIn) return;
+    try {
+      await notificationRepository.markRead(id);
+      await refreshNotifications();
+    } catch (e) {
+      notificationError = e.toString();
+      debugPrint("Notification error: $e");
+      notifyListeners();
+    }
   }
 
-  void markAllNotificationsRead() {
-    notifications = notifications
-        .map(
-          (item) => item.copyWith(isRead: true),
-    )
-        .toList();
-
-    notifyListeners();
+  Future<void> markAllNotificationsRead() async {
+    if (!isLoggedIn) return;
+    try {
+      await notificationRepository.markAllRead();
+      await refreshNotifications();
+    } catch (e) {
+      notificationError = e.toString();
+      debugPrint("Notification error: $e");
+      notifyListeners();
+    }
   }
 
   // =========================
@@ -251,10 +303,14 @@ class AppState extends ChangeNotifier {
     required String purpose,
     required String note,
   }) async {
-    String date(DateTime d) => '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    String date(DateTime d) =>
+        '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
     final booking = await bookingViewModel.create({
-      'room_id': room.id, 'start_date': date(startDate), 'end_date': date(endDate),
-      'purpose': purpose, 'note': note,
+      'room_id': room.id,
+      'start_date': date(startDate),
+      'end_date': date(endDate),
+      'purpose': purpose,
+      'note': note,
     });
     notifyListeners();
     return booking;
